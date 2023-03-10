@@ -1,0 +1,6 @@
+anti_useragent==1.0.10
+capmonstercloudclient==1.1.0
+httpx==0.23.3
+loguru==0.6.0
+names==0.3.0
+urllib3==1.26.13
