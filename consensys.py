@@ -4,6 +4,8 @@ from string import ascii_letters
 
 from anti_useragent import UserAgent
 from httpx import AsyncClient, Response
+from httpx._exceptions import (ConnectError, ConnectTimeout, ProxyError,
+                               ReadTimeout)
 from loguru import logger
 from urllib3 import encode_multipart_formdata
 
@@ -37,8 +39,11 @@ def get_modified_headers(user_agent: str) -> dict:
 
 
 class HSFormClient:
-    def __init__(self, user_agent: str) -> None:
-        self.client = AsyncClient(headers=get_modified_headers(user_agent))
+    def __init__(self, proxy: str | None, user_agent: str) -> None:
+        self.client = AsyncClient(
+            proxies={"all://": proxy} if proxy else None,
+            headers=get_modified_headers(user_agent)
+        )
 
     async def _request(self, url: str, method: str, **kwargs) -> dict:
         response = await self.client.request(method, url, **kwargs)
@@ -51,11 +56,11 @@ class HSFormClient:
 
 
 class Consensys(HSFormClient):
-    def __init__(self) -> None:
+    def __init__(self, proxy: str | None) -> None:
         self.ua = UserAgent().random
         self.user = UserData()
 
-        super().__init__(self.ua)
+        super().__init__(proxy, self.ua)
 
     async def submit_newsletter_form(self, email: str, g_recaptcha_response: str) -> bool:
         data = {
@@ -103,8 +108,8 @@ class Consensys(HSFormClient):
 
 async def worker(worker_num: int, q: Queue):
     while not q.empty():
-        email = await q.get()
-        consensys = Consensys()
+        email, proxy = await q.get()
+        consensys = Consensys(proxy)
 
         logger.info(f"{worker_num} | {email} - solving captcha...")
         captcha_token = await solve_by_capmonster()
@@ -116,6 +121,9 @@ async def worker(worker_num: int, q: Queue):
         except HSFormError as e:
             logger.error(
                 f"{worker_num} | {email} failed to submit to newsletter form: {e}")
+        except (ConnectError, ConnectTimeout, ReadTimeout, ProxyError):
+            logger.error(f"{worker_num} | {email} failed connecting, maybe proxy is dead")
+            continue
 
         try:
             await consensys.submit_nft_form(email)
@@ -123,5 +131,8 @@ async def worker(worker_num: int, q: Queue):
         except HSFormError as e:
             logger.error(
                 f"{worker_num} | {email} failed to submit to NFT form: {e}")
+        except (ConnectError, ConnectTimeout, ReadTimeout, ProxyError):
+            logger.error(f"{worker_num} | {email} failed connecting, maybe proxy is dead")
+            continue
             
         await consensys.client.aclose()
