@@ -1,0 +1,3 @@
+email@domain.ltd|http://username:password@localhost:8030
+email@domain.ltd|socks5://username:password@localhost:8030
+email@domain.ltd
