@@ -1,4 +1,5 @@
 from asyncio import Queue
+from json import JSONDecodeError
 from random import choice, choices
 from string import ascii_letters
 
@@ -50,8 +51,14 @@ class HSFormClient:
         return self._validate_response(response)
 
     def _validate_response(self, response: Response) -> bool:
-        if response.json().get("success") or response.json().get("accepted"):
+        try:
+            _json = response.json()
+        except (JSONDecodeError):
+            raise HSFormError(response.text)
+
+        if _json.get("success") or _json.get("accepted"):
             return True
+
         raise HSFormError(response.text)
 
 
